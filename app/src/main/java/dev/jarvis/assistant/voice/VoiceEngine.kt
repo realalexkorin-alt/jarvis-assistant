@@ -21,7 +21,11 @@ interface VoiceEngine {
 }
 
 /** Android TTS is a replaceable adapter; no prerecorded or proprietary voice samples are embedded. */
-class AndroidTtsVoiceEngine(private val context: Context) : VoiceEngine {
+class AndroidTtsVoiceEngine(
+    private val context: Context,
+    private val onReady: () -> Unit = {},
+    private val onUtteranceFinished: () -> Unit = {},
+) : VoiceEngine {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var engine: TextToSpeech? = null
     private var generation = 0
@@ -79,18 +83,19 @@ class AndroidTtsVoiceEngine(private val context: Context) : VoiceEngine {
                 mainHandler.post { if (!closed && attempt == generation) state = "Произношу текст…" }
             }
             override fun onDone(utteranceId: String) {
-                mainHandler.post { if (!closed && attempt == generation) state = "Голосовой движок готов" }
+                mainHandler.post { if (!closed && attempt == generation) { state = "Голосовой движок готов"; onUtteranceFinished() } }
             }
             @Deprecated("Android TTS API")
             override fun onError(utteranceId: String) {
-                mainHandler.post { if (!closed && attempt == generation) state = "Ошибка воспроизведения TTS" }
+                mainHandler.post { if (!closed && attempt == generation) { state = "Ошибка воспроизведения TTS"; onUtteranceFinished() } }
             }
             override fun onError(utteranceId: String, errorCode: Int) {
-                mainHandler.post { if (!closed && attempt == generation) state = "Ошибка TTS: код $errorCode" }
+                mainHandler.post { if (!closed && attempt == generation) { state = "Ошибка TTS: код $errorCode"; onUtteranceFinished() } }
             }
         })
         ready = true
         state = "Голосовой движок готов"
+        onReady()
     }
 
     override fun speak(text: String, settings: VoiceSettings) {
@@ -105,9 +110,10 @@ class AndroidTtsVoiceEngine(private val context: Context) : VoiceEngine {
                 null,
                 UUID.randomUUID().toString()
             )
-            if (outcome != TextToSpeech.SUCCESS) state = "TTS отклонил запрос озвучивания"
+            if (outcome != TextToSpeech.SUCCESS) { state = "TTS отклонил запрос озвучивания"; onUtteranceFinished() }
         } catch (_: Exception) {
             state = "Не удалось воспроизвести текст через TTS"
+            onUtteranceFinished()
         }
     }
 

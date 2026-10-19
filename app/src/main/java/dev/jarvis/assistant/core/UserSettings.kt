@@ -2,6 +2,13 @@ package dev.jarvis.assistant.core
 import android.content.Context
 
 data class VoiceSettings(val speechRate: Float = 0.88f, val pitch: Float = 0.85f)
+data class EventSettings(
+    val notificationsEnabled: Boolean = true,
+    val speakContent: Boolean = false,
+    val batteryEnabled: Boolean = true,
+    val hourlyEnabled: Boolean = true,
+    val allowedApps: Set<String> = emptySet(),
+)
 
 class UserSettings(context: Context) {
     private val prefs = context.getSharedPreferences("jarvis_settings", Context.MODE_PRIVATE)
@@ -12,5 +19,20 @@ class UserSettings(context: Context) {
     fun save(settings: VoiceSettings) {
         prefs.edit().putFloat("speech_rate", settings.speechRate)
             .putFloat("pitch", settings.pitch).apply()
+    }
+    fun loadEvents() = EventSettings(
+        notificationsEnabled = prefs.getBoolean("events_notifications", true),
+        speakContent = prefs.getBoolean("events_content", false),
+        batteryEnabled = prefs.getBoolean("events_battery", true),
+        hourlyEnabled = prefs.getBoolean("events_hourly", true),
+        allowedApps = prefs.getStringSet("events_apps", emptySet())?.toSet().orEmpty(),
+    )
+    fun saveEvents(settings: EventSettings) {
+        prefs.edit()
+            .putBoolean("events_notifications", settings.notificationsEnabled)
+            .putBoolean("events_content", settings.speakContent)
+            .putBoolean("events_battery", settings.batteryEnabled)
+            .putBoolean("events_hourly", settings.hourlyEnabled)
+            .putStringSet("events_apps", settings.allowedApps.toSet()).apply()
     }
 }

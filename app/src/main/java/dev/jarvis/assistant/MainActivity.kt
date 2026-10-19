@@ -1,6 +1,14 @@
 package dev.jarvis.assistant
 
 import android.os.Bundle
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import dev.jarvis.assistant.events.JarvisBackgroundService
 import androidx.core.app.NotificationManagerCompat
 import androidx.compose.material3.Checkbox
 import dev.jarvis.assistant.core.EventSettings
@@ -82,6 +90,28 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
     var installedFile by remember { mutableStateOf<File?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    fun startVoiceService() {
+        try {
+            ContextCompat.startForegroundService(
+                context, Intent(context, JarvisBackgroundService::class.java)
+            )
+            message = "Фоновая озвучка запускается. Проверьте постоянное уведомление JARVIS."
+        } catch (error: Exception) {
+            message = "Не удалось запустить фоновую службу: " + error.javaClass.simpleName
+        }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) message = "Уведомления JARVIS запрещены; системное уведомление о фоновой работе может быть скрыто."
+        startVoiceService()
+    }
+    fun requestBackgroundService() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else startVoiceService()
+    }
     val installedApps = remember {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -158,6 +188,37 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
         }
         HorizontalDivider()
         Text("Голосовые события", style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (JarvisBackgroundService.running) "Фоновая служба активна"
+            else "Фоновая служба остановлена"
+        )
+        if (JarvisBackgroundService.running) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    if (JarvisBackgroundService.scheduleBackgroundTest()) {
+                        message = "Тест назначен. Заблокируйте экран: фраза прозвучит через 20 секунд."
+                    } else message = "Фоновая служба не запущена"
+                }) { Text("Тест фона · 20 сек") }
+                OutlinedButton(onClick = {
+                    context.stopService(Intent(context, JarvisBackgroundService::class.java))
+                    message = "Фоновая озвучка остановлена"
+                }) { Text("Остановить фон") }
+            }
+        } else {
+            Button(onClick = { requestBackgroundService() }, enabled = accessGranted) {
+                Text("Включить фоновую озвучку")
+            }
+        }
+        OutlinedButton(onClick = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))
+                )
+            }
+        }) { Text("Настройки энергосбережения") }
+
         Text(if (accessGranted) "Доступ к уведомлениям разрешён" else "Доступ к уведомлениям не предоставлен")
         if (!accessGranted) Button(onClick = {
             try {
@@ -166,7 +227,7 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
                 message = "Не удалось открыть настройки доступа к уведомлениям"
             }
         }) { Text("Предоставить доступ") }
-        Text("Для этих событий нужен доступ к уведомлениям. Huawei может останавливать фоновые процессы.", style = MaterialTheme.typography.bodySmall)
+        Text("Фоновая служба запускается вручную и показывает постоянное уведомление. На Huawei также разрешите работу в фоне и отключите оптимизацию батареи для JARVIS.", style = MaterialTheme.typography.bodySmall)
         Row {
             Checkbox(checked = events.notificationsEnabled, onCheckedChange = { updateEvents(events.copy(notificationsEnabled = it)) })
             Text("Озвучивать уведомления", modifier = Modifier.padding(top = 12.dp))

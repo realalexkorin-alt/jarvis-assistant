@@ -8,6 +8,7 @@ data class EventSettings(
     val batteryEnabled: Boolean = true,
     val hourlyEnabled: Boolean = true,
     val allowedApps: Set<String> = emptySet(),
+    val neuralVoiceEnabled: Boolean = false,
 )
 
 class UserSettings(context: Context) {
@@ -26,6 +27,7 @@ class UserSettings(context: Context) {
         batteryEnabled = prefs.getBoolean("events_battery", true),
         hourlyEnabled = prefs.getBoolean("events_hourly", true),
         allowedApps = prefs.getStringSet("events_apps", emptySet())?.toSet().orEmpty(),
+        neuralVoiceEnabled = prefs.getBoolean("events_neural_voice", false),
     )
     fun saveEvents(settings: EventSettings) {
         prefs.edit()
@@ -33,6 +35,7 @@ class UserSettings(context: Context) {
             .putBoolean("events_content", settings.speakContent)
             .putBoolean("events_battery", settings.batteryEnabled)
             .putBoolean("events_hourly", settings.hourlyEnabled)
-            .putStringSet("events_apps", settings.allowedApps.toSet()).apply()
+            .putStringSet("events_apps", settings.allowedApps.toSet())
+            .putBoolean("events_neural_voice", settings.neuralVoiceEnabled).apply()
     }
 }

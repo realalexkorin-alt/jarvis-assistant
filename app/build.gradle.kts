@@ -10,8 +10,8 @@ android {
         applicationId = "dev.jarvis.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2002
-        versionName = "0.2.2"
+        versionCode = 2003
+        versionName = "0.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     val keystorePath = providers.environmentVariable("JARVIS_KEYSTORE_FILE").orNull
@@ -47,5 +47,6 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation(files("libs/sherpa-onnx.aar"))
     testImplementation("junit:junit:4.13.2")
 }

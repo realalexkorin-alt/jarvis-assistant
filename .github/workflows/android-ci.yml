@@ -29,6 +29,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Validate offline voice-lab scripts
+        run: python3 -m py_compile tools/prepare_voice_references.py tools/try_chatterbox_v3.py
       - name: Unit tests and assemble debug APK
         run: gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
       - uses: actions/upload-artifact@v4

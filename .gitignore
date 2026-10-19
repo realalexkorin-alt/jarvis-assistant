@@ -1,0 +1,15 @@
+.gradle/
+.idea/
+*.iml
+local.properties
+build/
+**/build/
+*.jks
+*.keystore
+*.wav
+*.mp3
+*.ogg
+*.pem
+*.p12
+*.pfx
+.DS_Store

@@ -1,0 +1,63 @@
+name: Signed APK Release
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag vX.Y.Z (create tag before dispatch)'
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KEYSTORE_B64: ${{ secrets.JARVIS_KEYSTORE_BASE64 }}
+      JARVIS_KEYSTORE_PASSWORD: ${{ secrets.JARVIS_KEYSTORE_PASSWORD }}
+      JARVIS_KEY_ALIAS: ${{ secrets.JARVIS_KEY_ALIAS }}
+      JARVIS_KEY_PASSWORD: ${{ secrets.JARVIS_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag and signing configuration
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then TAG="$GITHUB_REF_NAME"; else TAG="$DISPATCH_TAG"; fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected tag vX.Y.Z'; exit 1; }
+          VERSION=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          [[ "$TAG" == "v$VERSION" ]] || { echo "Tag $TAG does not match app version $VERSION"; exit 1; }
+          test -n "$KEYSTORE_B64" && test -n "$JARVIS_KEYSTORE_PASSWORD" && test -n "$JARVIS_KEY_ALIAS" && test -n "$JARVIS_KEY_PASSWORD" || { echo 'Missing required repository signing secrets'; exit 1; }
+          printf 'RELEASE_TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/jarvis-release.jks"
+          printf 'JARVIS_KEYSTORE_FILE=%s\n' "$RUNNER_TEMP/jarvis-release.jks" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-36'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit tests and signed release build
+        run: gradle --no-daemon --stacktrace testDebugUnitTest assembleRelease
+      - name: Prepare distributable APK
+        run: |
+          set -euo pipefail
+          cp app/build/outputs/apk/release/app-release.apk jarvis-assistant.apk
+          sha256sum jarvis-assistant.apk > jarvis-assistant.apk.sha256
+      - name: Publish public GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: JARVIS Assistant ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          files: |
+            jarvis-assistant.apk
+            jarvis-assistant.apk.sha256
+          fail_on_unmatched_files: true

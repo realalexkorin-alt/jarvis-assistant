@@ -60,9 +60,16 @@ class LocalPcmPlayer {
                     if (written <= 0) break
                     index += written
                 }
-                if (generation.get() == id) {
-                    // drain remaining samples without blocking app main thread
-                    t.stop()
+                if (generation.get() == id && index == speech.samples.size) {
+                    // AudioTrack.write() only queues audio. Wait for playback to finish
+                    // before releasing the track (previous code cut off the last samples).
+                    val deadline = System.currentTimeMillis() +
+                        (1000L * speech.samples.size / speech.sampleRate) + 1500L
+                    while (generation.get() == id && System.currentTimeMillis() < deadline &&
+                        t.playbackHeadPosition.toLong() < speech.samples.size.toLong()) {
+                        Thread.sleep(20)
+                    }
+                    if (generation.get() == id) t.stop()
                 }
                 t.release()
                 if (track === t) track = null

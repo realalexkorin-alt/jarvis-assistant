@@ -13,3 +13,12 @@ build/
 *.p12
 *.pfx
 .DS_Store
+
+# Voice reference recordings, fine-tuned models and generated examples
+voice-data/
+voice-output/
+private-voice/
+models/
+*.safetensors
+*.ckpt
+*.pth

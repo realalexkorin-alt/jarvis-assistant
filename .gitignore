@@ -22,3 +22,6 @@ models/
 *.safetensors
 *.ckpt
 *.pth
+
+app/libs/
+app/src/main/assets/vits-piper-ru_RU-dmitri-medium/

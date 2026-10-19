@@ -23,6 +23,7 @@ import dev.jarvis.assistant.MainActivity
 import dev.jarvis.assistant.core.EventPolicy
 import dev.jarvis.assistant.core.UserSettings
 import dev.jarvis.assistant.voice.AndroidTtsVoiceEngine
+import dev.jarvis.assistant.voice.VoiceTextNormalizer
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.ArrayDeque
@@ -167,7 +168,7 @@ class JarvisBackgroundService : Service() {
         speaking = true
         try {
             wakeLock?.acquire(45_000L)
-            voice.speak(queue.removeFirst(), storage.load())
+            voice.speak(VoiceTextNormalizer.normalize(queue.removeFirst()), storage.load())
         } catch (_: Exception) {
             releaseWakeLock()
             speaking = false

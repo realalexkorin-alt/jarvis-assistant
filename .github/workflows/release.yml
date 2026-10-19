@@ -51,6 +51,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Stage offline neural runtime and Russian model
+        run: bash tools/stage_android_neural_tts.sh
       - name: Unit tests and signed release build
         run: gradle --no-daemon --stacktrace testDebugUnitTest assembleRelease
       - name: Prepare distributable APK

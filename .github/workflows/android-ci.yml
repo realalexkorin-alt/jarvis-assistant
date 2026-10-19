@@ -31,6 +31,8 @@ jobs:
           gradle-version: '8.13'
       - name: Validate offline voice-lab scripts
         run: python3 -m py_compile tools/prepare_voice_references.py tools/try_chatterbox_v3.py
+      - name: Stage offline neural runtime and Russian model
+        run: bash tools/stage_android_neural_tts.sh
       - name: Unit tests and assemble debug APK
         run: gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug
       - uses: actions/upload-artifact@v4

@@ -24,6 +24,7 @@ import dev.jarvis.assistant.core.EventPolicy
 import dev.jarvis.assistant.core.UserSettings
 import dev.jarvis.assistant.voice.AndroidTtsVoiceEngine
 import dev.jarvis.assistant.voice.VoiceTextNormalizer
+import dev.jarvis.assistant.voice.NeuralOfflineVoice
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.ArrayDeque
@@ -59,6 +60,7 @@ class JarvisBackgroundService : Service() {
 
     private lateinit var storage: UserSettings
     private lateinit var voice: AndroidTtsVoiceEngine
+    private lateinit var neural: NeuralOfflineVoice
     private val queue = ArrayDeque<String>()
     private var speaking = false
     private var wakeLock: PowerManager.WakeLock? = null
@@ -94,6 +96,7 @@ class JarvisBackgroundService : Service() {
                 flushQueue()
             }
         )
+        neural = NeuralOfflineVoice(applicationContext)
         active = this
         running = true
         val filter = IntentFilter().apply {
@@ -168,7 +171,17 @@ class JarvisBackgroundService : Service() {
         speaking = true
         try {
             wakeLock?.acquire(45_000L)
-            voice.speak(VoiceTextNormalizer.normalize(queue.removeFirst()), storage.load())
+            val line = VoiceTextNormalizer.normalize(queue.removeFirst())
+            if (storage.loadEvents().neuralVoiceEnabled) {
+                neural.synthesizeAndPlay(line, storage.load().speechRate) { success ->
+                    if (!success) voice.speak(line, storage.load())
+                    else {
+                        releaseWakeLock()
+                        speaking = false
+                        flushQueue()
+                    }
+                }
+            } else voice.speak(line, storage.load())
         } catch (_: Exception) {
             releaseWakeLock()
             speaking = false
@@ -185,6 +198,7 @@ class JarvisBackgroundService : Service() {
         try { unregisterReceiver(systemEvents) } catch (_: IllegalArgumentException) {}
         queue.clear()
         voice.close()
+        neural.close()
         releaseWakeLock()
         super.onDestroy()
     }

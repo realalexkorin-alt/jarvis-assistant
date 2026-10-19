@@ -51,7 +51,7 @@ import dev.jarvis.assistant.core.UserSettings
 import dev.jarvis.assistant.updates.GitHubUpdater
 import dev.jarvis.assistant.updates.RemoteRelease
 import dev.jarvis.assistant.voice.AndroidTtsVoiceEngine
-import dev.jarvis.assistant.voice.LocalVoiceModelStore
+import dev.jarvis.assistant.voice.NeuralOfflineVoice
 import dev.jarvis.assistant.voice.VoiceTextNormalizer
 import kotlinx.coroutines.launch
 import java.io.File
@@ -92,6 +92,7 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
     var installedFile by remember { mutableStateOf<File?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val neural = remember { NeuralOfflineVoice(context.applicationContext) }
     fun startVoiceService() {
         try {
             ContextCompat.startForegroundService(
@@ -136,7 +137,8 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
         Text("VOICE ASSISTANT · v" + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.primary)
         Text("Голосовой модуль", style = MaterialTheme.typography.titleLarge)
         Text("JARVIS Voice Engine · локальная архитектура", style = MaterialTheme.typography.titleMedium)
-        Text(remember { LocalVoiceModelStore(context).status }, style = MaterialTheme.typography.bodySmall)
+        Text("Нейросеть VITS · русский Дмитрий · полностью офлайн (эксперимент)", style = MaterialTheme.typography.bodySmall)
+        Text(neural.status, style = MaterialTheme.typography.bodySmall)
         Text(tts.state, style = MaterialTheme.typography.bodyMedium)
         if (!tts.ready) {
             Text(
@@ -171,7 +173,13 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
             }
             OutlinedButton(onClick = { tts.stop() }) { Text("Остановить") }
         }
-        Card(Modifier.fillMaxWidth()) {
+        Button(enabled = phrase.isNotBlank(), onClick = {
+            message = "Генерирую нейроголос на телефоне…"
+            neural.synthesizeAndPlay(VoiceTextNormalizer.normalize(phrase), settings.speechRate) { ok ->
+                message = if (ok) "Нейросинтез выполнен" else "Ошибка нейросинтеза: " + neural.status
+            }
+        }) { Text("Проверить нейроголос офлайн") }
+                Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Профиль JARVIS · системный TTS", style = MaterialTheme.typography.titleMedium)
                 Text("Скорость: " + "%.2f".format(settings.speechRate))
@@ -192,6 +200,12 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
         }
         HorizontalDivider()
         Text("Голосовые события", style = MaterialTheme.typography.titleLarge)
+        Row {
+            Checkbox(checked = events.neuralVoiceEnabled, onCheckedChange = {
+                updateEvents(events.copy(neuralVoiceEnabled = it))
+            })
+            Text("Нейроголос для уведомлений (RHVoice при сбое)", modifier = Modifier.padding(top = 8.dp))
+        }
         Text(
             if (JarvisBackgroundService.running) "Фоновая служба активна"
             else "Фоновая служба остановлена"

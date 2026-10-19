@@ -24,3 +24,6 @@ For stable updates configure 4 signing secrets according to [SECURITY.md](SECURI
 Audio samples and signing credentials must not be committed into this public repository.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md), [TESTING.md](TESTING.md).
+
+## 0.2.1 Huawei background preview
+The UI offers **Enable background voice**, which starts a persistent foreground service with an ongoing notification and a 20-second delayed voice test for lock-screen verification. Grant notification access first; grant app notification display permission on Android 13+. Some Huawei phones require manual app-launch and battery-optimization exceptions. The OS may still terminate this service, and hourly Android tick events are not guaranteed during Doze. No automatic boot startup.

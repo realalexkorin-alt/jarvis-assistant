@@ -1,6 +1,17 @@
 package dev.jarvis.assistant
 
 import android.os.Bundle
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import dev.jarvis.assistant.events.JarvisBackgroundService
+import androidx.core.app.NotificationManagerCompat
+import androidx.compose.material3.Checkbox
+import dev.jarvis.assistant.core.EventSettings
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
@@ -45,6 +56,7 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
     private lateinit var tts: AndroidTtsVoiceEngine
+    private var accessGranted by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,17 +66,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
-                    JarvisScreen(tts, settings, updater)
+                    JarvisScreen(tts, settings, updater, accessGranted)
                 }
             }
         }
+    }
+    override fun onResume() {
+        super.onResume()
+        accessGranted = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
     }
     override fun onDestroy() { tts.close(); super.onDestroy() }
 }
 
 @Composable
-private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, updater: GitHubUpdater) {
+private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, updater: GitHubUpdater, accessGranted: Boolean) {
     var phrase by remember { mutableStateOf("Сэр, ваш персональный ассистент готов к работе.") }
+    var events by remember { mutableStateOf(storage.loadEvents()) }
+    var showApps by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(storage.load()) }
     var message by remember { mutableStateOf("Готово к первому запуску") }
     var busy by remember { mutableStateOf(false) }
@@ -72,6 +90,41 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
     var installedFile by remember { mutableStateOf<File?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    fun startVoiceService() {
+        try {
+            ContextCompat.startForegroundService(
+                context, Intent(context, JarvisBackgroundService::class.java)
+            )
+            message = "Фоновая озвучка запускается. Проверьте постоянное уведомление JARVIS."
+        } catch (error: Exception) {
+            message = "Не удалось запустить фоновую службу: " + error.javaClass.simpleName
+        }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) message = "Уведомления JARVIS запрещены; системное уведомление о фоновой работе может быть скрыто."
+        startVoiceService()
+    }
+    fun requestBackgroundService() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else startVoiceService()
+    }
+    val installedApps = remember {
+        val pm = context.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        pm.queryIntentActivities(intent, 0)
+            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+            .filter { it.first != context.packageName }
+            .distinctBy { it.first }
+            .sortedBy { it.second.lowercase() }
+    }
+    fun updateEvents(next: EventSettings) {
+        events = next
+        storage.saveEvents(next)
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -134,6 +187,83 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
             }
         }
         HorizontalDivider()
+        Text("Голосовые события", style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (JarvisBackgroundService.running) "Фоновая служба активна"
+            else "Фоновая служба остановлена"
+        )
+        if (JarvisBackgroundService.running) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    if (JarvisBackgroundService.scheduleBackgroundTest()) {
+                        message = "Тест назначен. Заблокируйте экран: фраза прозвучит через 20 секунд."
+                    } else message = "Фоновая служба не запущена"
+                }) { Text("Тест фона · 20 сек") }
+                OutlinedButton(onClick = {
+                    context.stopService(Intent(context, JarvisBackgroundService::class.java))
+                    message = "Фоновая озвучка остановлена"
+                }) { Text("Остановить фон") }
+            }
+        } else {
+            Button(onClick = { requestBackgroundService() }, enabled = accessGranted) {
+                Text("Включить фоновую озвучку")
+            }
+        }
+        OutlinedButton(onClick = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))
+                )
+            }
+        }) { Text("Настройки энергосбережения") }
+
+        Text(if (accessGranted) "Доступ к уведомлениям разрешён" else "Доступ к уведомлениям не предоставлен")
+        if (!accessGranted) Button(onClick = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            } catch (_: Exception) {
+                message = "Не удалось открыть настройки доступа к уведомлениям"
+            }
+        }) { Text("Предоставить доступ") }
+        Text("Фоновая служба запускается вручную и показывает постоянное уведомление. На Huawei также разрешите работу в фоне и отключите оптимизацию батареи для JARVIS.", style = MaterialTheme.typography.bodySmall)
+        Row {
+            Checkbox(checked = events.notificationsEnabled, onCheckedChange = { updateEvents(events.copy(notificationsEnabled = it)) })
+            Text("Озвучивать уведомления", modifier = Modifier.padding(top = 12.dp))
+        }
+        if (events.notificationsEnabled) {
+            Row {
+                Checkbox(checked = events.speakContent, onCheckedChange = { updateEvents(events.copy(speakContent = it)) })
+                Text("Читать текст уведомлений, включая личные сообщения", modifier = Modifier.padding(top = 8.dp))
+            }
+            Text("Содержимое остаётся на телефоне. Чтение текста по умолчанию выключено.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = { showApps = !showApps }) {
+                Text("Выбрать приложения (" + events.allowedApps.size + ")")
+            }
+            if (showApps) {
+                if (installedApps.isEmpty()) Text("Список приложений недоступен")
+                for ((appId, name) in installedApps) {
+                    Row {
+                        Checkbox(checked = appId in events.allowedApps, onCheckedChange = { enabled ->
+                            val chosen = if (enabled) events.allowedApps + appId else events.allowedApps - appId
+                            updateEvents(events.copy(allowedApps = chosen))
+                        })
+                        Text(name, modifier = Modifier.padding(top = 12.dp))
+                    }
+                }
+            }
+        }
+        Row {
+            Checkbox(checked = events.batteryEnabled, onCheckedChange = { updateEvents(events.copy(batteryEnabled = it)) })
+            Text("Батарея: при снижении через каждые 10%", modifier = Modifier.padding(top = 12.dp))
+        }
+        Row {
+            Checkbox(checked = events.hourlyEnabled, onCheckedChange = { updateEvents(events.copy(hourlyEnabled = it)) })
+            Text("Объявлять время каждый час", modifier = Modifier.padding(top = 12.dp))
+        }
+        Text("Время объявляется в начале часа, если Android доставил фоновое событие.", style = MaterialTheme.typography.bodySmall)
+        HorizontalDivider()
         Text("Обновления", style = MaterialTheme.typography.titleLarge)
         Text(message)
         Button(enabled = !busy, onClick = {
@@ -175,6 +305,6 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
             }) { Text("Установить APK") }
         }
         Spacer(Modifier.height(4.dp))
-        Text("Уведомления и интеграции будут добавлены в следующих версиях.", style = MaterialTheme.typography.bodySmall)
+        Text("Фоновое озвучивание требует проверки на реальном Huawei.", style = MaterialTheme.typography.bodySmall)
     }
 }

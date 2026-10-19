@@ -1,6 +1,10 @@
 package dev.jarvis.assistant
 
 import android.os.Bundle
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.jarvis.assistant.core.UserSettings
 import dev.jarvis.assistant.updates.GitHubUpdater
@@ -66,6 +71,7 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
     var remoteRelease by remember { mutableStateOf<RemoteRelease?>(null) }
     var installedFile by remember { mutableStateOf<File?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -75,6 +81,28 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
         Text("VOICE ASSISTANT · v" + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.primary)
         Text("Голосовой модуль", style = MaterialTheme.typography.titleLarge)
         Text(tts.state, style = MaterialTheme.typography.bodyMedium)
+        if (!tts.ready) {
+            Text(
+                "Для произнесения текста на телефоне должен быть включён TTS с русским голосом.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { tts.retry() }) {
+                    Text("Повторить проверку")
+                }
+            }
+            OutlinedButton(onClick = {
+                try {
+                    context.startActivity(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA))
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                } catch (_: SecurityException) {
+                    message = "Android не разрешил открыть настройки голосового движка."
+                }
+            }) {
+                Text("Настроить голос Android")
+            }
+        }
         OutlinedTextField(
             value = phrase, onValueChange = { phrase = it },
             modifier = Modifier.fillMaxWidth(),

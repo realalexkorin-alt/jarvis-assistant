@@ -51,6 +51,8 @@ import dev.jarvis.assistant.core.UserSettings
 import dev.jarvis.assistant.updates.GitHubUpdater
 import dev.jarvis.assistant.updates.RemoteRelease
 import dev.jarvis.assistant.voice.AndroidTtsVoiceEngine
+import dev.jarvis.assistant.voice.LocalVoiceModelStore
+import dev.jarvis.assistant.voice.VoiceTextNormalizer
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -133,6 +135,8 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
         Text("J.A.R.V.I.S.", style = MaterialTheme.typography.headlineLarge)
         Text("VOICE ASSISTANT · v" + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.primary)
         Text("Голосовой модуль", style = MaterialTheme.typography.titleLarge)
+        Text("JARVIS Voice Engine · локальная архитектура", style = MaterialTheme.typography.titleMedium)
+        Text(remember { LocalVoiceModelStore(context).status }, style = MaterialTheme.typography.bodySmall)
         Text(tts.state, style = MaterialTheme.typography.bodyMedium)
         if (!tts.ready) {
             Text(
@@ -162,7 +166,7 @@ private fun JarvisScreen(tts: AndroidTtsVoiceEngine, storage: UserSettings, upda
             label = { Text("Текст для синтеза") }, minLines = 3, maxLines = 8,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { tts.speak(phrase, settings) }, enabled = tts.ready && phrase.isNotBlank()) {
+            Button(onClick = { tts.speak(VoiceTextNormalizer.normalize(phrase), settings) }, enabled = tts.ready && phrase.isNotBlank()) {
                 Text("Произнести")
             }
             OutlinedButton(onClick = { tts.stop() }) { Text("Остановить") }
